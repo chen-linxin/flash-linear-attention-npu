@@ -77,8 +77,13 @@ public:
         chunkFastPath_ = std::is_same<GType, float>::value && std::is_same<OType, float>::value &&
                          ((tiling_->h & (FLOAT_ALIGN_ELEMS - 1)) == 0) &&
                          (fastHTileSize_ >= FLOAT_ALIGN_ELEMS);
-        if (chunkFastPath_) {
-            int64_t chunkBufferBytes = AlignUpInt64(tiling_->chunkSize * fastHTileSize_ *
+        contiguousChunkFastPath_ = std::is_same<GType, float>::value && std::is_same<OType, float>::value &&
+                                   tiling_->headFirst != 0 && tiling_->h == 1;
+        if (chunkFastPath_ || contiguousChunkFastPath_) {
+            int64_t chunkBufferElements = contiguousChunkFastPath_
+                                              ? tiling_->chunkSize
+                                              : tiling_->chunkSize * fastHTileSize_;
+            int64_t chunkBufferBytes = AlignUpInt64(chunkBufferElements *
                                                     static_cast<int64_t>(sizeof(float)), UB_ALIGN_BYTES);
             pipe_.InitBuffer(chunkQueue_, BUFFER_NUM, chunkBufferBytes);
             pipe_.InitBuffer(scanBuf_, chunkBufferBytes);
@@ -302,6 +307,57 @@ private:
         chunkQueue_.FreeTensor(chunkLocal);
     }
 
+    __aicore__ inline LocalTensor<float> LoadContiguousChunkToUb(int64_t gmOffset, int64_t chunkLen)
+    {
+        LocalTensor<float> chunkLocal = chunkQueue_.AllocTensor<float>();
+        if ((chunkLen & (FLOAT_ALIGN_ELEMS - 1)) == 0) {
+            DataCopy(chunkLocal, gGm_[gmOffset], static_cast<uint32_t>(chunkLen));
+        } else {
+            DataCopyExtParams copyParams{1, static_cast<uint32_t>(chunkLen * static_cast<int64_t>(sizeof(float))),
+                                         0, 0, 0};
+            DataCopyPadExtParams<float> padParams{false, 0, 0, 0.0f};
+            DataCopyPad(chunkLocal, gGm_[gmOffset], copyParams, padParams);
+        }
+        chunkQueue_.EnQue(chunkLocal);
+        return chunkQueue_.DeQue<float>();
+    }
+
+    __aicore__ inline void CopyContiguousChunkToGm(int64_t gmOffset, LocalTensor<float> chunkLocal,
+                                                   int64_t chunkLen)
+    {
+        if ((chunkLen & (FLOAT_ALIGN_ELEMS - 1)) == 0) {
+            DataCopy(outGm_[gmOffset], chunkLocal, static_cast<uint32_t>(chunkLen));
+        } else {
+            DataCopyExtParams copyParams{1, static_cast<uint32_t>(chunkLen * static_cast<int64_t>(sizeof(float))),
+                                         0, 0, 0};
+            DataCopyPad(outGm_[gmOffset], chunkLocal, copyParams);
+        }
+    }
+
+    __aicore__ inline void ProcessContiguousChunkFast(int64_t baseOffset, int64_t chunkStart, int64_t chunkEnd)
+    {
+        int64_t chunkLen = chunkEnd - chunkStart;
+        int64_t gmOffset = baseOffset + chunkStart;
+        LocalTensor<float> chunkLocal = LoadContiguousChunkToUb(gmOffset, chunkLen);
+        float accumulator = 0.0f;
+        if (tiling_->reverse != 0) {
+            for (int64_t index = chunkLen - 1; index >= 0; --index) {
+                accumulator += chunkLocal.GetValue(index);
+                chunkLocal.SetValue(index, accumulator * tiling_->scale);
+            }
+        } else {
+            for (int64_t index = 0; index < chunkLen; ++index) {
+                accumulator += chunkLocal.GetValue(index);
+                chunkLocal.SetValue(index, accumulator * tiling_->scale);
+            }
+        }
+        PipeBarrier<PIPE_V>();
+        WaitVToMte3();
+        CopyContiguousChunkToGm(gmOffset, chunkLocal, chunkLen);
+        WaitMte3ToV();
+        chunkQueue_.FreeTensor(chunkLocal);
+    }
+
     __aicore__ inline void StoreAccumVector(int64_t outOffset, LocalTensor<float> accLocal, int64_t hLen)
     {
         if (tiling_->scale == 1.0f) {
@@ -357,7 +413,7 @@ private:
         int64_t blockNum = static_cast<int64_t>(GetBlockNum());
         int64_t blockIdx = static_cast<int64_t>(GetBlockIdx());
         int64_t chunkNum = CeilDivInt64(tiling_->t, tiling_->chunkSize);
-        int64_t hTileSize = chunkFastPath_ ? fastHTileSize_ : H_TILE_SIZE;
+        int64_t hTileSize = contiguousChunkFastPath_ ? 1 : (chunkFastPath_ ? fastHTileSize_ : H_TILE_SIZE);
         int64_t hTileNum = CeilDivInt64(tiling_->h, hTileSize);
         int64_t taskNum = tiling_->b * chunkNum * hTileNum;
         for (int64_t taskIdx = blockIdx; taskIdx < taskNum; taskIdx += blockNum) {
@@ -371,7 +427,9 @@ private:
             int64_t chunkEnd = MinInt64(chunkStart + tiling_->chunkSize, tiling_->t);
             int64_t baseOffset = bIdx * tiling_->t * tiling_->h;
             if constexpr (std::is_same<GType, float>::value && std::is_same<OType, float>::value) {
-                if (chunkFastPath_) {
+                if (contiguousChunkFastPath_) {
+                    ProcessContiguousChunkFast(baseOffset, chunkStart, chunkEnd);
+                } else if (chunkFastPath_) {
                     ProcessSequenceChunkFast(baseOffset, chunkStart, chunkEnd, hStart, hLen);
                 } else {
                     ProcessSequenceChunk(baseOffset, chunkStart, chunkEnd, hStart, hLen);
@@ -386,7 +444,7 @@ private:
     {
         int64_t blockNum = static_cast<int64_t>(GetBlockNum());
         int64_t blockIdx = static_cast<int64_t>(GetBlockIdx());
-        int64_t hTileSize = chunkFastPath_ ? fastHTileSize_ : H_TILE_SIZE;
+        int64_t hTileSize = contiguousChunkFastPath_ ? 1 : (chunkFastPath_ ? fastHTileSize_ : H_TILE_SIZE);
         int64_t hTileNum = CeilDivInt64(tiling_->h, hTileSize);
         int64_t taskNum = tiling_->b * tiling_->numBlocks * hTileNum;
         for (int64_t taskIdx = blockIdx; taskIdx < taskNum; taskIdx += blockNum) {
@@ -407,7 +465,9 @@ private:
             for (int64_t chunkStart = tStart; chunkStart < tEnd; chunkStart += tiling_->chunkSize) {
                 int64_t chunkEnd = MinInt64(chunkStart + tiling_->chunkSize, tEnd);
                 if constexpr (std::is_same<GType, float>::value && std::is_same<OType, float>::value) {
-                    if (chunkFastPath_) {
+                    if (contiguousChunkFastPath_) {
+                        ProcessContiguousChunkFast(baseOffset, chunkStart, chunkEnd);
+                    } else if (chunkFastPath_) {
                         ProcessSequenceChunkFast(baseOffset, chunkStart, chunkEnd, hStart, hLen);
                     } else {
                         ProcessSequenceChunk(baseOffset, chunkStart, chunkEnd, hStart, hLen);
@@ -435,6 +495,7 @@ private:
     const ChunkLocalCumsumTilingData *tiling_ = nullptr;
     int64_t fastHTileSize_ = H_TILE_SIZE;
     bool chunkFastPath_ = false;
+    bool contiguousChunkFastPath_ = false;
     TEventID vToMte3Event_;
     TEventID mte3ToVEvent_;
 };

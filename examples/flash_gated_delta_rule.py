@@ -32,8 +32,7 @@ from fla_npu.ops.ascendc import (
     chunk_fwd_o as ascendc_chunk_fwd_o,
     chunk_gated_delta_rule_bwd_dhu as ascendc_chunk_gated_delta_rule_bwd_dhu,
     chunk_gated_delta_rule_fwd_h as ascendc_chunk_gated_delta_rule_fwd_h,
-    prepare_wy_repr_bwd_da as ascendc_prepare_wy_repr_bwd_da,
-    prepare_wy_repr_bwd_full as ascendc_prepare_wy_repr_bwd_full,
+    prepare_wy_repr_bwd as ascendc_prepare_wy_repr_bwd,
     recompute_w_u_fwd as ascendc_recompute_w_u_fwd,
     solve_tri as ascendc_solve_tri,
 )
@@ -978,25 +977,11 @@ def flash_chunk_gated_delta_rule_bwd(
         transpose_state_layout=False,
     )
 
-    dA = ascendc_prepare_wy_repr_bwd_da(
-        k,
-        v,
-        beta.float(),
-        A,
-        dw,
-        dv,
-        g.float(),
-        chunk_size=chunk_size,
-        cu_seqlens=cu_seqlens_list,
-        chunk_indices=_chunk_list(chunk_indices_list, chunk_size),
-    )
-
-    dk2, dv, db, dg2 = ascendc_prepare_wy_repr_bwd_full(
+    dk2, dv, db, dg2 = ascendc_prepare_wy_repr_bwd(
         k,
         v,
         beta,
         A,
-        dA,
         dw,
         dv,
         g,
