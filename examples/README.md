@@ -13,6 +13,10 @@ examples/
 │   └── triton_ascend_kda/
 │       └── sitecustomize.py          # 可选的 Triton Ascend KDA 启动适配器
 ├── add_example/                      # Add 算子端到端工程样例
+│   ├── op_host/                      # 算子定义、Tiling 和 InferShape
+│   ├── op_kernel/                    # AI Core Kernel
+│   ├── op_kernel_aicpu/              # AICPU Kernel（含 fallback 场景）
+│   └── tests/                        # 算子测试工程
 ├── fast_kernel_launch_example/       # Ascend C Kernel 直调与 PyTorch Extension 样例
 ├── CMakeLists.txt                    # 自动加入包含 CMakeLists.txt 的示例子目录
 ├── flash_gated_delta_rule.py         # GDN 前向、反向和模型级冒烟示例
@@ -93,7 +97,7 @@ bash build_and_test.sh chunk_fwd_o
 
 ## Add 算子工程样例
 
-[`add_example`](add_example/README.md) 展示一个完整的 Add 算子工程，包括算子定义、Tiling、InferShape、Kernel、aclnn 调用样例和 UT。该目录用于理解标准 AI Core 算子工程结构，不属于 GDN 端到端调用链。
+[`add_example`](add_example/README.md) 展示一个完整的 Add 算子工程，包括算子定义、Tiling、InferShape、Kernel、AICPU fallback、aclnn 调用样例和 UT。该目录用于理解标准 AI Core 算子工程结构，不属于 GDN 端到端调用链。
 
 ## Triton Ascend KDA 适配器
 
@@ -106,3 +110,10 @@ python3 <model_entry.py>
 ```
 
 未设置 `FLA_NPU_ENABLE_TRITON_ASCEND_KDA_ADAPTER=1` 时，该启动钩子不会安装适配器。
+
+## 新增示例要求
+
+- 新增示例必须可独立运行，避免依赖其他示例的中间产物。
+- 涉及新算子的示例，需同时提供该算子的单算子测试（`torch_custom/fla_npu/test/test_npu_<op>.py`）并接入 `test.sh`。
+- 示例代码优先使用稳定 Python 入口 `fla_npu.ops.ascendc` / `fla_npu.ops.triton`，不要默认走 legacy `torch.ops.npu.*` 路径。
+- 在 `examples/` 新增子目录时，如需参与统一编译，请提供对应 `CMakeLists.txt`。
