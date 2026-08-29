@@ -21,13 +21,13 @@
 
 | 任务 | 必读文档 |
 |---|---|
-| 新增、修改或检视 Ascend C 算子 | [`算子开发通用约束`](development/算子开发通用约束.md) -> [`算子开发方法论`](development/算子开发方法论.md) -> [`算子编码规范`](development/算子编码规范.md) -> [`算子开发交付清单`](development/算子开发交付清单.md) -> [`验证方法与矩阵`](development/验证方法与矩阵.md) |
+| 新增、修改或检视 Ascend C 算子 | [`算子开发通用约束`](development/算子开发通用约束.md) -> [`算子开发设计文档模板`](development/算子开发设计文档模板.md) -> 算子目录 `docs/算子开发设计.md` -> [`算子开发方法论`](development/算子开发方法论.md) -> [`算子编码规范`](development/算子编码规范.md) -> [`算子开发交付清单`](development/算子开发交付清单.md) -> [`验证方法与矩阵`](development/验证方法与矩阵.md) |
 | 算子性能设计或优化 | [`算子开发通用约束`](development/算子开发通用约束.md) -> [`算子编码规范`](development/算子编码规范.md) -> [`optimization/README.md`](optimization/README.md) 按依赖类型和目标 SOC 路由 -> [`验证方法与矩阵`](development/验证方法与矩阵.md) |
 | 修改 Python runtime、wheel、OPP 或兼容路径 | [`算子开发通用约束`](development/算子开发通用约束.md) -> [`PyTorch 与 NPU 解耦架构`](architecture/PyTorch与NPU解耦架构.md) -> [`验证方法与矩阵`](development/验证方法与矩阵.md) |
 | 定位精度、ABI、生成代码或跨 SOC 问题 | [`算子开发通用约束`](development/算子开发通用约束.md) 和对应专项文档 |
 | 整理交付和测试结果 | [`算子开发交付清单`](development/算子开发交付清单.md) -> [`验证方法与矩阵`](development/验证方法与矩阵.md) |
 
-具体算子的 README 和设计文档只说明该算子的接口、语义、实现和验证，不作为其他算子可以直接复制的通用优化规则。
+具体算子的 README 和设计文档只说明该算子的接口、语义、实现和验证，不作为其他算子可以直接复制的通用优化规则。设计文档必须归档在对应算子目录下；模板和 GDN 参考设计只规定结构与评审字段，不提供可直接复制的资源数字。
 
 ## 编写原则
 

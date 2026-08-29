@@ -30,6 +30,7 @@
 - 公共接口、shape/dtype/layout/range、预留参数、平台差异、返回码或报错文本变化，必须同步检查代码、README、aclnn 文档、PyTorch API 文档、测试和示例。
 - 编写或重构 Ascend C 算子代码时必须遵守 `docs/agents/development/算子编码规范.md`；涉及 A5 时同时遵守 `docs/agents/optimization/soc/A5优化约束.md` 的 A5 编码约束。
 - 性能设计或优化前必须先判断 chunk 间是否存在 carry，并按 `docs/agents/optimization/README.md` 阅读对应依赖模型、技术分类和目标 SOC 文档。不得把具体算子的窗口数、slot 数、容量或同步协议未经重新推导直接复制到其他算子。
+- 新增、融合、重构或较大范围优化算子时，必须在实现代码前完成 `fla/ops/ascendc/.../<operator>/docs/算子开发设计.md`，并参考 `docs/agents/development/算子开发设计文档模板.md` 以及 GDN backward finalize 全融合 Ascend C 设计的完整章节结构；已有算子修改先更新该文档，文档或测试-only 改动须在 PR 中明确标记为不适用。
 - 公开 PR、issue、评论和总结中不要暴露内网地址、机器名、用户名、绝对路径、临时目录、日志路径、token 或本地调测环境细节。
 - 构建和测试默认面向 Linux + CANN + NPU 环境；其他平台只做静态阅读、文本编辑或格式检查，不把未验证命令写成已验证结论。
 
