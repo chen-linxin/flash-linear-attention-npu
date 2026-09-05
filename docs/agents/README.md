@@ -78,8 +78,8 @@ GPU 和 Triton Ascend 路径都使用相同输入与 CPU 标杆比较。用户�
 
 ## 参考资料分层
 
-- [`reference/精度对比与定位.md`](reference/精度对比与定位.md) 统一维护阶段 2 和阶段 4 共用的
-  输出比较、误差定位和值域校准方法；各阶段只读取与当前任务对应的路线。
+- [`reference/精度对比与定位.md`](reference/精度对比与定位.md) 统一维护阶段 2、阶段 4 和阶段 5
+  共用的值域校准、输出比较、误差定位和日常精度看护方法；各阶段只读取与当前任务对应的路线。
 - [`reference/03-solution-design/`](reference/03-solution-design/) 保存方案设计案例；新算子在阶段 3 读取完整案例，既有算子优先读取自己的设计文档。
 - [`reference/04-operator-development/`](reference/04-operator-development/) 保存阶段 4 的实现参考；根据 chunk 依赖类型选择并读取其中一份开发参考。
 - 参考资料按所属阶段分目录维护，阶段入口仍是 `01`–`05` 五个主文件。
