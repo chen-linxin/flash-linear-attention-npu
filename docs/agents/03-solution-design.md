@@ -1,17 +1,17 @@
 # 方案设计
 
-当前规则版本：`V1`
+当前规则版本：`V2`
 
-本阶段同时完成 Stage 划分、逐 Stage 详设和全局资源分配，产出归档在对应算子目录的 `docs/design.md`。完整方案整体评审通过后进入 [`04-operator-development.md`](04-operator-development.md)。
+本阶段同时完成 Stage 划分、逐 Stage 详设和资源分配。接口与支持范围归档在对应算子目录的 `docs/api.md`，方案详设归档在 `docs/design.md`，验证计划与后续证据在开发期临时记录到 `docs/validation.md`；三者分别维护。完整方案整体评审通过后进入 [`04-operator-development.md`](04-operator-development.md)。
 
 ## 设计路由
 
 | 场景 | 读取内容 | 设计链路 |
 | --- | --- | --- |
 | 新算子 | 已确认接口、CPU 标杆、目标 SoC 约束、本文件、与当前规则版本一致的[完整设计案例](reference/03-solution-design/complete-design-example.md) | 建立完整计算图 → 按 `R01`–`R21` 同时完成 Stage、逐 Stage 详设和资源分配 → 整体评审 → `04` |
-| 既有算子的接口或功能修改 | 当前 `docs/design.md`、实现和测试，以及 `01` 确认的差异；CPU 标杆变化时同时读取 `02` 的更新结果 | 建立当前实现基线 → 只设计已确认的差异并定义原有场景回归范围 → 更新受影响的 Stage、资源和测试计划 → 整体评审 → `04` |
-| 既有算子的实现修复 | 当前 `docs/design.md`、实现、CPU 标杆和失败用例 | 定位实现与既有设计的差异 → 形成修复方案并更新受影响设计 → 定义失败场景和原有场景回归 → `04` |
-| 既有算子的性能优化 | 当前 `docs/design.md`、实现、测试、优化前精度和 profiling 数据 | 跑基线 → 以代码为准校准当前设计文档 → 根据瓶颈设计并实验候选方案 → 用户确认采用 → 同步更新设计文档 → `04` |
+| 既有算子的接口或功能修改 | 当前 `docs/api.md`、`docs/design.md`、算子 ATK README、存在时的 `docs/validation.md`、实现和测试，以及 `01` 确认的差异；CPU 标杆变化时同时读取 `02` 的更新结果 | 建立当前实现基线 → 新建或更新开发期验证记录 → 只设计已确认的差异并定义原有场景回归范围 → 更新受影响的 Stage、资源和验证计划 → 整体评审 → `04` |
+| 既有算子的实现修复 | 当前 `docs/api.md`、`docs/design.md`、算子 ATK README、存在时的 `docs/validation.md`、实现、CPU 标杆和失败用例 | 定位实现与既有设计的差异 → 新建或更新开发期验证记录 → 形成修复方案并更新受影响设计 → 定义失败场景和原有场景回归 → `04` |
+| 既有算子的性能优化 | 当前 `docs/api.md`、`docs/design.md`、算子 ATK README、存在时的 `docs/validation.md`、实现、测试、优化前精度和 profiling 数据 | 跑基线 → 新建或更新开发期验证记录 → 以代码为准校准设计与验证记录 → 根据瓶颈设计并实验候选方案 → 用户确认采用 → 同步更新设计和验证记录 → `04` |
 
 新算子的 Stage 方案依据已确认接口、CPU 标杆、目标硬件约束和 `R01`–`R21` 独立推导；仓内其他算子的实现从 `04` 开始作为工程写法参考。
 
@@ -19,108 +19,116 @@
 
 接口、数学语义或支持范围需要变化时返回 [`01-interface-confirmation.md`](01-interface-confirmation.md)；CPU 标杆或预期结果需要变化时返回 [`02-reference-generation.md`](02-reference-generation.md)。
 
+存在性能目标时，用户提供的模型 case 是方案设计输入。每个模型 case 必须记录 shape、dtype、
+目标 SoC、对比基线、性能目标和统计方式；信息不完整时先向用户确认，不能用自行选择的 shape
+替代模型 case。
+
 ## Stage 划分与详设准则
 
 以下规则用于设计和评审完整方案。“Cube 操作”是矩阵乘及必要的矩阵累加；其余逐元素、归约、广播、layout、cast、copy 和 mask 等属于“Vector 操作”。“驻留区”是数据生产后继续保存在 L1 或 UB、供后续 Stage 使用的区域。
 
-- **R01**：每个 Stage 保持类型单一，统一包含 Cube 操作或 Vector 操作；一个 Stage 可以包含多个同类型操作。`CG` 通过 TilingKey 作为模板参数传入，不同 `CG` 复用相同代码逻辑。
+- **R01**：每个 Stage 保持类型单一，统一包含 Cube 操作或 Vector 操作；一个 Stage 可以包含多个同类型操作。`CG` 只沿输入 shape 的 value-head 轴 `HV` 分组，表示一个 AIC 及其两个 AIV 一次协同处理的连续 value head 数。每个沿 `HV` 展开的 Cube 操作和 Vector 操作都包含 `CG` 份逻辑任务，AIC 按 `r=0..CG-1` 依次执行 Cube 任务。每份 Vector 任务沿其连续计算维横切为两个不重叠的半片；AIV0/AIV1 作为同一份任务的两个执行通道，都按 `r=0..CG-1` 执行全部逻辑任务，并分别负责其中一片的计算和写回。不同 `CG` 沿用同一套映射，只改变循环上限。
 - **R02**：Cube Stage 的全部输入由前序 Stage 或算子输入提供；Vector Stage 内的后续计算可以依赖本 Stage 前面产生的 Vector 结果。一个 Stage 完成后，其结果可作为后继 Stage 的输入。
 - **R03**：容量上限使用目标 SoC 可供算子使用的 L1 和 UB 容量；设计文档记录目标 SoC、容量依据和实际可用上限。L1 只用于 Cube 路径，UB 只用于 Vector 路径。
-- **R04**：Cube 结果后续要被 Vector 使用且不是算子最终输出时，必须放入 UB 驻留区，并按模板参数 `CG` 的并行份数预留独立空间；例如 `CG=4` 时预留 4 份。
-- **R05**：Vector 结果后续还要被 Vector 使用且不是算子最终输出时，必须放入 UB 驻留区，并按模板参数 `CG` 的并行份数预留独立空间；例如 `CG=4` 时预留 4 份。
-- **R06**：Vector 结果后续要被 Cube 使用时，必须先写入 GM，后续 Cube Stage 再从 GM 读取。
-- **R07**：Cube 结果后续还要被 Cube 使用且不是算子最终输出时，必须放入 L1 驻留区，并为同时存活的数据预留独立空间。
+- **R04**：需要继续由 Vector 使用的 Cube 中间结果，必须按 R01 的 AIV 任务映射分别写入 AIV0/AIV1 的 UB 驻留区。若 Cube 可连续产生当前 head 切片的 `CG` 份任务，UB 默认按每个 AIV `CG` 份结果规划，使 Cube 连续发布全部结果。缩减驻留份数时，设计必须明确同时存活数并提供性能证据。
+- **R05**：需要继续由 Vector 使用的 Vector 中间结果，分别保存在 AIV0 和 AIV1 各自的 UB 中；每个 AIV 只保存按 R01 映射由自己处理的结果，并按同时存活的逻辑任务数和 ping/pong 深度预留空间。每个 AIV 的 UB 容量按自身保存的结果和任务映射计算。
+- **R06**：Vector 结果后续要被 Cube 使用时，两个 AIV 必须按 R01 的任务映射，将同一逻辑任务中各自负责的结果写入 GM 对应区间；后续 Cube Stage 等该逻辑任务的全部 AIV 结果都 ready 后再从 GM 读取完整输入。
+- **R07**：需要继续由 Cube 使用的 Cube 中间结果必须放入 L1 驻留区，并按当前 TilingKey 的 `CG` 为同时存活的数据预留独立空间；`CG=4` 时预留四份。
 - **R08**：UB 容量按当前 Vector Stage 的全部输入、输出、中间量和驻留数据总峰值计算。
-- **R09**：L1 可以常驻其他 tensor，也可以在不同 Stage 改变区域语义；任何常驻数据都必须按实际并行份数预留独立空间。
+- **R09**：L1 可以常驻其他 tensor，也可以在不同 Stage 改变区域语义；任何常驻数据都必须按当前 TilingKey 的 Cube 并行份数预留独立空间，份数由当前模板的实际并行量推导。
 - **R10**：同一路径中的每份数据从 GM 搬入一次。若同一原始数据同时供 Cube 和 Vector 使用，可分别从 GM 搬一次到 L1 和 UB。
 - **R11**：UB 地址区间的语义可以随 Stage 改变，但必须遵守生命周期，只有该区间中的旧数据全部完成最后一次消费后才能复用。
-- **R12**：一个 Vector Stage 一次搬完本 Stage 所需的全部数据，并通过一次 VF 调用完成本 Stage 计算；容量计算要包含这次搬入的全部输入、输出和中间数据。
+- **R12**：一个 Vector Stage 中，每个 AIV 一次搬完当前逻辑任务中按 R01 映射由自己负责部分所需的全部数据，并通过一次 VF 调用完成计算。计算 UB 用量时，要把本 AIV 在这次计算期间同时放在 UB 里的数据全部加起来，包括输入、输出、中间结果，以及会重复使用的缩放系数、门控值、mask 等小张量。
 - **R13**：无依赖关系的 Cube Stage 和 Vector Stage 按可能并行执行建模；两者同时存活的驻留空间采用互不重叠的地址区间。
 - **R14**：L1/UB 容量不足或依赖冲突时，可以将中间结果写回 GM，再由后续 Stage 读入；采用该方式时记录冲突原因、重复搬运的数据量和性能代价。
-- **R15**：在满足依赖和容量要求的前提下，减少连续同类 Stage 的数量和其中的任务数量，并说明当前划分已经无法继续合并的原因。
+- **R15**：在满足依赖和容量要求的前提下，减少连续同类 Stage 的数量和其中的任务数量。
 - **R16**：Vector 路径复用需要多次使用的 Vector 结果，优先放入驻留区，并在容量表中记录生命周期。
 - **R17**：L1 和 UB 中仍然有效的数据保留原地址；地址规划预留足够大的连续区间，并计算总空闲空间和最大连续空闲区，确认二者都满足分配需求。
 - **R18**：同一语义、不同 head 的数据执行相同操作并采用相同的存放位置。
-- **R19**：Stage 划分首先检查合并后完整活跃数据的 L1、UB、L0 容量和生命周期。若空间足够，则只按真实数据依赖和 Cube/Vector 类型边界拆分，并取最少 Stage；若空间不足，优先评估按 R14 将中间结果写回 GM 后保持更少 Stage，只有 GM 中转无法满足正确性、生命周期或性能目标时才拆分 Stage。无论采用哪种方式，都应取满足约束的最少 Stage。
-- **R20**：分核先确定可独立调度的 head 轴 `H`，并说明它是 `HK`、`HV` 或其它语义轴以及共享输入、归约和输出写冲突。设定长每个 batch 的 chunk 数为 `NC`；chunk 间无依赖时，逻辑任务数为 `B * NC * ceil(H / CG)`，chunk 间有依赖时为 `B * ceil(H / CG)`，且同一任务顺序处理该 head 组的全部 chunk；变长场景分别用实际 chunk 条目数或独立 sequence 数替代 `B * NC` 或 `B`。`CG` 的默认值域为 `{1, 2, 4}`，由 TilingKey 选择并作为模板参数传入，所有取值复用相同代码逻辑。任务使用 `blockDim = min(AIC_CORE_NUM, Ntask)` 和 grid-stride 分发，尾 head 组只执行有效份。按 `CG=4` 计算的 `Ntask` 足以覆盖 `AIC_CORE_NUM` 时固定使用 `CG=4`，以最大化 AIC/AIV 流水；仅当 `CG=4` 的任务数不足，或受到 head 映射、资源容量或正确性约束时，才评估 `CG=2/1`。对需要评估的候选配置，设计必须记录任务数、wave 数、负载与 tail、L1/UB/L0 容量、GM/workspace 搬运、AIC/AIV 关键路径和同步代价；有目标设备时做同条件实测并选择最快配置。没有设备实测时不得宣称最优，应依据正确性、地址所有权、负载均衡、流水平衡和搬运/同步开销选择暂定配置。
-- **R21**：数值稳定性门禁。方案必须分析高风险运算的计算 dtype、输入及中间值范围、溢出/下溢、`NaN/Inf`、cast 和 mask 时机。代数变换不得引入更大的数值风险；无效位置应在高风险运算前排除或替换为安全值。风险无边界证明或保护方案时，不得进入开发阶段。
+- **R19**：Stage 划分首先检查合并后完整活跃数据的 L1、UB、L0 容量和生命周期。空间足够时，按真实数据依赖和 Cube/Vector 类型边界拆分，并取最少 Stage；空间不足时，优先评估按 R14 将中间结果写回 GM 后保持更少 Stage。额外拆分 Stage 的采用条件是该拆分能够满足 GM 中转路径尚未满足的正确性、生命周期或性能目标。所有方案均取满足约束的最少 Stage。
+- **R20**：分核沿 `HV` 轴展开，按 R01 定义的 `CG` 形成工作项，并明确 `hv` 到其它 head 轴的映射，以及共享输入、归约和输出写冲突。基础任务数记为 `Nbase`：chunk 间无依赖时为本次调用的 chunk 总数，chunk 间有依赖时为 sequence 总数；工作项总数为 `Nwork=Nbase*ceil(HV/CG)`。`blockDim` 取可用 AIC 核数与 `Nwork` 的较小值，并使用 grid-stride 分发；末尾不足 `CG` 时只处理有效 head。`CG` 通常从 `4/2/1` 中选择，使用其它值时需说明 head 映射合法性；不同 `CG` 复用同一参数化 kernel。设计需比较各候选的执行波次数、尾部负载、资源容量、数据搬运、AIC/AIV 关键路径和同步开销；有设备时同条件实测并选择最快方案，无设备时将结论标为暂定，并依次按正确性、地址所有权、负载均衡、流水平衡、搬运和同步开销选择，证据相当时优先较大的 `CG`。
+- **R21**：数值稳定性门禁。方案分析高风险运算的计算 dtype、输入及中间值范围、溢出/下溢、`NaN/Inf`、cast 和 mask 时机。代数变换保持或降低数值风险；无效位置在高风险运算前排除或替换为安全值。进入开发阶段的条件是高风险运算具备边界证明或保护方案。
 
 ## 设计文档内容
 
-`docs/design.md` 在标题后记录 `方案设计规则版本：<当前版本>`，并保持以下五章结构。新算子的章节组织和细节深度参考[完整设计案例](reference/03-solution-design/complete-design-example.md)，既有算子沿用自己的设计文档。
+`docs/api.md` 是输入、输出、属性、可选项、默认值、返回顺序、异常、兼容性、SoC、dtype、
+layout、shape、定长/变长和支持范围的唯一事实来源。
+`docs/design.md` 在标题后记录 `方案设计规则版本：<当前版本>`，引用 `docs/api.md`，但不复制
+接口签名、shape 表或支持范围；并保持以下两章结构。新算子参考
+[完整设计案例](reference/03-solution-design/complete-design-example.md)的推导过程和细节深度，
+章节结构以本表为准；既有算子沿用自己的设计文档。
 
 | 章节 | 必须包含的内容 |
 | --- | --- |
-| 1. 目标 | 融合或拆分范围、完整调用链、数学边界、目标场景和性能目标 |
-| 2. 范围与 shape | 目标 SoC、dtype、layout、固定与可变维度、head 关系、fixed/varlen、tail 和支持组合 |
-| 3. 算子接口 | 输入、输出、属性、可选项、返回顺序、异常和兼容性，与 `01` 一致 |
-| 4. Stage 0–N 完整数学语义 | 完整公式、数据依赖、Stage 总览、任务映射和逐 Stage 详设 |
-| 5. Stage 资源分配方案 | Stage 序列、分核与 TilingKey 参数、L1/UB/GM/workspace/L0 全局分配、生命周期、同步资源和 `R01`–`R21` 检查表 |
+| 1. 目标 | 融合或拆分范围、完整调用链、数学边界和目标场景；存在性能目标时，逐个列出模型 case、对比基线、目标和统计方式 |
+| 2. Stage 0–N 完整详设 | 直接给出 Stage 结果；依次说明每个 Stage 的功能、公式、任务映射和 L1/UB/GM/workspace/L0；最后用伪代码说明 Stage 间同步 |
 
 ### 公式书写规范
 
 Cube Stage 中的矩阵乘、矩阵累加和带转置的 GEMM 必须使用 `@` 表达矩阵运算，格式为
 `C = A @ B`，并通过旁注同时注明操作数 shape、物理 layout/transpose、累加 dtype
-和 Fixpipe 写出。禁止使用 `sum_i`、`sum_j` 等逐元素求和式作为 matmul 的主语义描述；
-逐元素 `sum` 仅可用于明确标注为 Vector reduction 的非-GEMM 计算。
+和 Fixpipe 写出。Matmul 的主语义统一使用 `@`；逐元素 `sum` 用于明确标注为
+Vector reduction 的非-GEMM 计算。
 
-含 R21 高风险运算时，公式旁必须列出“CPU 标杆公式 → 实现运算序列”的逐步对应，并为
-每一步注明计算 dtype、输入/中间值范围、非有限值风险和控制方式。只写最终等价公式或
-最终输出容差，不能替代中间值稳定性分析。
+含 R21 高风险运算时，公式旁列出“CPU 标杆公式 → 实现运算序列”的逐步对应，并为
+每一步注明计算 dtype、输入与中间值范围、非有限值风险和控制方式。中间值稳定性分析
+作为数值稳定性门禁的评审依据。
 
 ### 每个 Stage 的详设
 
 每个 Stage 使用 `Stage <编号>：<Cube/Vector>，<目的>` 作为标题，并写清：
 
 1. 公式、计算顺序、shape、有效长度、dtype 和最终输出关系。
-2. 输入来源、前置与并行 Stage，以及 batch/chunk、value head `hv`、q/k source head `hk` 的映射、head ratio、模板参数 `CG` 和 AIC/AIV 分工。
+2. 输入来源、前置与并行 Stage，以及 batch/chunk、value head `hv`、q/k source head `hk` 的映射、head ratio、当前 TilingKey 的 `CG` 和 AIC/AIV 分工。
 3. L1/UB 绝对半开区间、tensor、大小、对齐、份数、读写方、首次写入、最后消费和复用条件。
 4. GM/workspace 的 offset、大小、搬入、写回、生命周期，以及 `R14` 中转的原因和代价。
 5. 搬运、计算、原位覆盖、写回和释放的实际执行顺序。
-6. ping/pong slot、producer/consumer、ready/free、event、flag、任务组边界和复用闭环。
+6. Stage 内部的 ping/pong slot、event、flag 和复用闭环；跨 Stage 的 ready/free 统一放在最后的同步伪代码中。
 7. fixed length、varlen、tail、padding、空任务和无效区处理。
 
 Cube Stage 同时记录物理 layout、转置、L1/L0A/L0B/L0C、MMAD 累加和 Fixpipe 写出。Vector Stage 同时记录一次完整输入搬运、一次 VF 调用覆盖的公式、寄存器/UB 数据和输出。
 
-### 全局资源分配
+`docs/design.md` 以 Stage 划分结果为起点。Stage 章节先用一张结果表列出每个 Stage 的执行
+单元、功能和主要空间，再依次写完各 Stage；所有 Stage 说明完成后，集中用一段伪代码统一
+表示 `ready/free`、producer/consumer、事件方向和 slot 复用。
 
-全局资源章节写清：
+资源、workspace、生命周期和 Stage 内部同步直接写入产生或消费它们的 Stage；跨 Stage 同步
+统一写入最后的同步伪代码。跨多个 Stage 的量定义在首次生产该量的 Stage，并在消费者 Stage
+引用；Stage 结果表保留执行单元、功能和主要空间。设计评审直接逐项使用 `R01`–`R21` 作为
+检查清单。
 
-- 完整 Stage 序列、依赖关系和可能并行的 Stage 组合。
-- 每个目标 shape 域的 chunk 依赖类型、分核轴、候选 `CG`、任务数、`blockDim`、grid-stride 映射、tail 和参数选择证据。
-- L1 和 UB 的完整地址图、活跃集合、峰值、剩余空间、最大连续空闲区、生命周期和任务组边界。
-- GM/workspace 各区域的 producer、consumer、offset、大小、对齐、写入、读取、释放、复用和搬运次数。
-- Cube→Vector、Vector→Vector、Vector→Cube、Cube→Cube 和最终输出的存放位置、份数及末次消费。
-- slot、event、flag、ready/free 的生产、等待、消费和复用关系。
-- `R01`–`R21` 逐项检查结果，以及当前 Stage 数量和连续同类 Stage 的合并结论。
+### 开发期验证记录
 
-### 实现与验证计划
+`docs/validation.md` 在开发期间统一记录以下内容，`docs/design.md` 继续维护 Stage 方案本身：
 
-在上述对应章节记录：
-
-- host tiling 的 shape、属性、变长、tail、workspace 校验，以及各 shape 域的 task、offset、TilingKey 参数和分核选择。
+- host tiling 的 shape、属性、变长、tail、workspace 校验，以及各 shape 域的 task、offset、TilingKey、kernel 模板和分核选择。
 - kernel 的搬运、Cube/Vector 路径、padding/mask、同步和平台适配方案。
 - 关键中间量、最终输出、累加与 workspace dtype、计算顺序、cast 时机、容差和精度阈值。
-- 目标 shape、优化前性能、profiling 瓶颈、性能目标和其他支持场景的测试矩阵。
+- 用户提供的模型 case、优化前性能、profiling 瓶颈、逐 case 性能目标、统计方式和其他支持场景的
+  测试矩阵。
 - 接口或功能修改的差异与回归范围；优化任务的基线、实验结果、采用方案和相同条件下的前后对比。
 - 风险、兼容策略、回退方案和待确认问题。
 
-修改 Stage、公式、任务映射或空间布局时，同步更新逐 Stage 详设、全局地址图、峰值、生命周期和规则检查表。
+修改 Stage、公式、任务映射或空间布局时，直接同步更新 `docs/design.md` 中受影响 Stage 的
+地址、峰值、生命周期和同步说明，并更新 `docs/validation.md` 的验证项；实现和实测结果在
+开发期间只写入该记录。最终交付归档和记录删除按 `05-operator-testing.md` 执行。
 
 ## 完成条件
 
-- 设计文档已归档，规则版本与本文件一致，五章内容完整。
+- `docs/api.md`、`docs/design.md` 与开发期 `docs/validation.md` 已分别维护，接口、方案和验证内容无重复定义；设计规则版本与本文件一致，两章内容完整。
 - 所有计算节点都属于唯一 Stage，依赖、类型和公式符合 `R01`–`R21`。
-- 每个 Stage 的地址、任务映射、搬运、同步、边界和释放时机完整，并与全局资源表一致。
-- 每个支持 shape 都命中已验证的 `CG` 参数配置；候选比较和选择证据完整。
+- 每个 Stage 的地址、任务映射、搬运、边界和释放时机均完整说明；跨 Stage 的 producer/consumer、ready/free 和 slot 复用集中写在同步伪代码中，跨 Stage 量只有一处定义。
+- 每个支持 shape 都命中唯一、已验证的 TilingKey 分核模板；候选比较和选择证据完整。
 - 所有可能并行的 Stage 组合满足目标 SoC 的 L1/UB 可用容量和连续空间要求。
-- 所有支持维度、边界、SoC、`CG` 参数和 host tiling 选择都有验证计划。
+- 所有支持维度、边界、SoC、TilingKey 和 host tiling 分支都有实现与测试计划。
+- 存在性能目标时，用户提供的每个模型 case 都有明确的对比基线、性能目标和统计方式。
 - 完整设计、风险和回退方案整体评审通过。
 
 ## 规则版本维护
 
-`R01`–`R21` 新增、删除或含义变化时，规则版本依次升级，并同步更新版本记录和[完整设计案例](reference/03-solution-design/complete-design-example.md)。文字调整不改变规则含义时沿用当前版本。
+`R01`–`R21` 新增、删除或含义变化时，规则版本从 `V1` 依次升级为 `V2`、`V3`，并同步更新版本记录和[完整设计案例](reference/03-solution-design/complete-design-example.md)。仅调整文字且保持规则含义时沿用当前版本。
 
 | 版本 | 变化的规则 | 对既有设计的影响 |
 | --- | --- | --- |
-| `V1` | 初始发布规则 `R01`–`R21` | 新算子按完整规则设计；既有算子修改受影响链路时补齐对应分析 |
+| `V1` | 初始发布 `R01`–`R21` | 新算子按完整规则设计；既有算子在后续修改时记录规则版本 |
+| `V2` | `R01` 统一定义 AIV 任务横切映射；`R04/R05/R07/R09` 的驻留份数改为由 TilingKey 分核模板决定；`R06/R12` 分别引用该映射补充写入、ready 和单次 VF 约束；`R20` 将分核轴固定为 `HV` 并补充 shape 分域、分核候选和实测选择规则 | 既有设计在修改分核、TilingKey、任务映射或性能方案时，补齐 shape 分域、任务映射、候选比较、grid-stride 和 ready 证据 |
