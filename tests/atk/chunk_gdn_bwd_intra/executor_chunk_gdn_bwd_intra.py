@@ -34,6 +34,7 @@ from _ascendc_common_executor import (
 
 
 OP_NAME = "chunk_gdn_bwd_intra"
+QK_DO_INPUT_STD = 0.20
 
 
 def _param_dtype(name: str, high_precision: bool) -> torch.dtype:
@@ -106,8 +107,12 @@ def build_inputs(
     )
     chunk_indices = _canonical_chunk_indices(cu_seqlens, chunk_size)
     return {
-        "q": _randn((B, HK, T, K), dtype_name, calc_dtype, device, seed + 1),
-        "k": _randn((B, HK, T, K), dtype_name, calc_dtype, device, seed + 2),
+        "q": _randn(
+            (B, HK, T, K), dtype_name, calc_dtype, device, seed + 1, QK_DO_INPUT_STD
+        ),
+        "k": _randn(
+            (B, HK, T, K), dtype_name, calc_dtype, device, seed + 2, QK_DO_INPUT_STD
+        ),
         "v": _randn((B, HV, T, V), dtype_name, calc_dtype, device, seed + 3),
         "g": _build_gate((B, HV, T), g_dtype, device, seed + 4, high_precision),
         "beta": _rand(
@@ -120,7 +125,9 @@ def build_inputs(
             0.9,
         ),
         "A": _randn((B, HV, T, chunk_size), dtype_name, calc_dtype, device, seed + 6),
-        "d_o": _randn((B, HV, T, V), dtype_name, calc_dtype, device, seed + 7),
+        "d_o": _randn(
+            (B, HV, T, V), dtype_name, calc_dtype, device, seed + 7, QK_DO_INPUT_STD
+        ),
         "scale": float(spec.get("scale", 1.0 / math.sqrt(K))),
         "chunk_size": chunk_size,
         "use_exp2": bool(spec.get("use_exp2", True)),

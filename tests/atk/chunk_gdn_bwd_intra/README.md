@@ -9,8 +9,9 @@
 - CPU 标杆语义来源于用户提供并确认的参考材料；仓内版本位于
   `executor_chunk_gdn_bwd_intra.py`，与测试文件同提交。`_stage0_ref`、`_stage1_ref`、
   `_stage2_ref` 分别实现三个开发 Stage，正式精度测试使用 `_stage2_ref`。
-- CPU 节点以 FP64 计算。NPU 与 CPU 使用相同 seed；`q/k/v/A/d_o` 使用确定性正态分布，
-  `beta` 使用 `[0.1,0.9)` 均匀分布，`g` 使用公共 gate 输入生成器。
+- CPU 节点以 FP64 计算。NPU 与 CPU 使用相同 seed；`q/k/d_o` 使用标准差 `0.20` 的
+  确定性正态分布，`v/A` 使用标准差 `0.05` 的确定性正态分布，`beta` 使用
+  `[0.1,0.9)` 均匀分布，`g` 使用公共 gate 输入生成器。
 - 变长 profile 提供 `cu_seqlens`，executor 据此生成 canonical `chunk_indices`；CPU 和 NPU
   使用相同 sequence 边界切分，不跨 sequence 计算。
 - 精度标准为 ATK `mixed_tolerance_bm`。`scripts/smoke_stage.py --compare` 仅用于开发期
@@ -56,13 +57,18 @@
 
 ## 当前实测结果
 
-2026-09-04 使用 ATK 26.8.8 的 `mixed_tolerance_bm`，以 FP64 CPU 标杆比较 Stage 2 的
+2026-09-05 使用 ATK 26.8.8 的 `mixed_tolerance_bm`，以 FP64 CPU 标杆比较 Stage 2 的
 `w/u/dv_local`。16 个用例分四批执行，每批 4/4 通过，合计 16/16 通过。测试时关闭
 GM 初始化，避免测试框架的额外显存占用影响算子验证。
 
 固定长度诊断组合 `B=1,T=65,HK=3,HV=6,K=V=128` 的 w/u/dv_local 最大绝对误差
-分别为 `1.2079e-4`、`1.2095e-4`、`7.6257e-6`，均满足调试脚本的
-`rtol=5e-3, atol=5e-3`。该组合的算子调用和设备同步均正常返回。
+分别为 `4.8314e-4`、`1.2095e-4`、`4.8804e-4`。该组合的算子调用和设备同步均正常返回。
+
+2026-09-05 使用 CT v0.9.1 对 `q/k/d_o` 标准差 `0.10/0.15/0.20/0.25` 进行值域扫描。
+`0.10` 无法在 BF16 case 拦截全零 `dv_local`，`0.15` 的最弱 case 仅刚好越过 99% 匹配率
+门槛；选择 `0.20` 后，16 个 profile 的真实 `w/u/dv_local` 均满足混合容差，且全零
+`dv_local` 的匹配率降至 BF16 最高 `78.57%`、FP16 最高 `6.51%`，所有 profile 均能
+拦截全零输出。CT 分布图未发现系统偏移、分叉或按 head/chunk 聚集的误差。
 
 ## 执行方式
 
