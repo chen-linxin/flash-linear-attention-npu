@@ -119,8 +119,17 @@ aclnnStatus Check(const Params &p)
     const DataType betaType = p.beta->GetDataType();
     CHECK_COND(betaType == DataType::DT_BF16 || betaType == DataType::DT_FLOAT,
                ACLNN_ERR_PARAM_INVALID, "beta must be BF16 or FP32.");
-    CHECK_COND(p.cuSeqlens == nullptr || b == 1, ACLNN_ERR_PARAM_INVALID,
-               "varlen BNSD requires B=1.");
+    if (p.cuSeqlens != nullptr) {
+        CHECK_COND(b == 1, ACLNN_ERR_PARAM_INVALID,
+                   "varlen BNSD requires B=1.");
+        CHECK_COND(p.cuSeqlens->Size() > 0, ACLNN_ERR_PARAM_INVALID,
+                   "cu_seqlens must be a non-empty 1D array.");
+        CHECK_COND(p.chunkIndices != nullptr, ACLNN_ERR_PARAM_INVALID,
+                   "chunk_indices is required when cu_seqlens is provided.");
+        CHECK_COND(p.chunkIndices->Size() > 0 && p.chunkIndices->Size() % 2 == 0,
+                   ACLNN_ERR_PARAM_INVALID,
+                   "chunk_indices flattened length must be a positive multiple of 2.");
+    }
     return ACLNN_SUCCESS;
 }
 
