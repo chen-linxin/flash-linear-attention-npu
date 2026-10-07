@@ -26,7 +26,7 @@ tests/atk/
 |   |-- atk_<op_name>_perf.json     # 性能精简用例（模型 case）
 |   |-- atk_<op_name>_mss.json      # 内存检测精简用例（需覆盖所有 tilingKey）
 |   |-- <op_name>.yaml
-|   |-- gen_<op_name>.py
+|   |-- gen_<op_name>.py             # 可选的随机扩展用例生成器
 |   |-- scripts/
 |   |   └-- <本算子专用脚本>
 |   └-- executor_<op_name>.py
@@ -46,7 +46,7 @@ ATK 运行产生的 `atk_output/`、`result/`、profiling、sanitizer 日志、X
 | `common/_ascendc_common_executor.py` | executor 共用的基础工具函数，例如 dtype 转换、case_spec 解析、确定性数据生成、有限值检查 |
 | `<op>/reference.py`                  | CANNBot 生成的唯一纯 CPU/PyTorch 数学标杆，供直调测试和 ATK CPU 节点共同导入             |
 | `<op>/executor_<op>.py`              | 本算子的输入构造、`reference.py` 调用、NPU DUT 调用和 ATK `FunctionApi`                   |
-| `<op>/gen_<op>.py`                   | 本算子的 ATK 精度候选用例生成器                                                          |
+| `<op>/gen_<op>.py`                   | 可选的随机扩展用例生成器，不承担正式分支覆盖定义                                          |
 | `<op>/scripts/`                      | 适配完成后的整链路 smoke、数据采集或分析脚本，不放数学标杆或跨算子公共逻辑                |
 | `<op>/<op>.yaml`                     | ATK case 生成配置，shape 与 dtype 必须符合算子 README 和 tiling 限制                     |
 | `<op>/atk_<op>.json`                 | 逻辑分支覆盖用例，精度检测使用                                                          |
@@ -60,7 +60,7 @@ ATK 运行产生的 `atk_output/`、`result/`、profiling、sanitizer 日志、X
 
 ## 用例规模与覆盖
 
-ATK 只执行已固化的精度基线。执行前，接口、`reference.py`、输入生成器和精度策略必须与冻结的
+ATK 只执行已固化的精度基线。执行前，接口、`reference.py`、executor 和精度策略必须与冻结的
 CANNBot contract 一致，JSON 使用其中的值域、有效区域和固定随机种子。本节只维护用例规模和
 覆盖维度。
 
@@ -89,13 +89,13 @@ CPU 精度对比。
 
 | 文件 | 来源 | 完整条件 |
 | --- | --- | --- |
-| `atk_<op>.json` | `gen_cases` 生成的精度候选用例经筛选、补充后形成 | 每个可达逻辑分支具有独立最小用例，每个精度用例至少包含 3 个固定种子，并覆盖适用的正常、边界和异常场景 |
-| `atk_<op>_perf.json` | 用户在算子开发开始时提供的模型 case | 每个模型 case 均保留原始 shape、dtype、属性和目标 SoC；存在性能目标时逐 case 记录基线、目标和统计方式 |
-| `atk_<op>_mss.json` | 根据设计和实现中的全部可达 TilingKey 人工构造 | 每个可达 TilingKey 至少有一个最小代表用例，并覆盖该 key 下与内存、同步或复用有关的关键路径 |
+| `atk_<op>.json` | Agent 分析最终公开接口、executor、host tiling 和 kernel 的全部可达分支后直接生成 | 每个可达逻辑分支具有独立最小用例，数值敏感路径包含多个固定 seed，并覆盖适用的正常、边界和异常场景 |
+| `atk_<op>_perf.json` | CANNBot 01 冻结并经 CANNBot 05 实测的模型 case | 每个模型 case 均保留原始 shape、dtype、属性和目标 SoC；存在性能目标时逐 case 记录基线、目标和统计方式 |
+| `atk_<op>_mss.json` | Agent 根据最终实现的全部可达 TilingKey 和内存、同步、复用路径直接生成 | 每个可达 TilingKey 至少有一个最小代表用例，并覆盖该 key 下与内存、同步或复用有关的关键路径 |
 
-`gen_cases` 只调用当前算子的 `gen_<op>.py` 生成精度候选用例，不生成 `_perf.json` 或
-`_mss.json`。性能用例和 TilingKey 覆盖用例必须分别依据用户模型 case 和实际 TilingKey 人工
-构造；脚本只检查文件完整性并执行测试。
+CANNBot 05 完成且本仓适配就绪后，Agent 直接写出三份 ATK 格式 JSON，三份文件作为正式验收
+用例的唯一来源。`gen_cases` 定位为可选的随机扩展和探索工具，其结果可作为补充候选；正式精度
+覆盖以最终代码分支分析和 case 映射为准。
 
 算子 ATK README 必须建立三类映射：逻辑分支到精度 case id、用户模型 case 到性能 case id、
 可达 TilingKey 到 `_mss.json` case id。文件存在但映射缺失或覆盖不全，仍视为用例包不完整。
@@ -261,16 +261,16 @@ bash tests/atk/run_test_cpu.sh -op=<op_name> -scope=determinism
 bash tests/atk/run_test_cpu.sh -op=<op_name> -scope=mssanitizer
 ```
 
-### 精度候选用例生成
+### 可选精度扩展用例生成
 
-精度候选用例生成通过 ATK `case` 执行：
+需要补充随机扩展候选时，通过 ATK `case` 执行：
 
 ```bash
 bash tests/atk/run_test_cpu.sh -op=<op_name> -scope=gen_cases
 ```
 
-生成结果位于 `result/<op>/json/all_<op>.json`。开发者检查并筛选该文件后更新
-`atk_<op>.json`；该命令不会修改三份正式验收 JSON。
+生成结果位于 `result/<op>/json/all_<op>.json`。Agent 结合最终代码分支分析检查这些候选，将
+有效补充 case 直接写入 `atk_<op>.json`；三份正式验收 JSON 保留为固化交付件。
 
 生成相关变量：
 
@@ -285,16 +285,17 @@ bash tests/atk/run_test_cpu.sh -op=<op_name> -scope=gen_cases
 适配层接入后的预检按以下顺序执行：
 
 1. 确认 `reference.py` 与冻结的 golden contract 一致，CANNBot 五阶段已完成并通过直调 full 验收。
-2. 构建并安装当前代码，确认运行时加载的是本轮构建结果。
-3. 使用算子 `scripts/` 下的 smoke 入口调用公开 Python API，快速检查 ABI、kernel 启动、同步和
+2. 完成本仓公开 API、构建注册、executor 和 YAML 适配，构建并安装当前代码。
+3. Agent 分析最终公开接口、executor、host tiling 和 kernel，直接生成三份正式验收 JSON；在
+   算子 ATK README 中完成逻辑分支、模型 case、TilingKey 到 case id 的映射，并检查三份文件
+   可解析且非空、映射完整。
+4. 使用算子 `scripts/` 下的 smoke 入口调用公开 Python API，快速检查 ABI、kernel 启动、同步和
    基本精度；该步骤属于适配完成后的整链路预检。
-4. 使用 `ACCURACY_START=<id>`、`ACCURACY_END=<id+1>` 和 `-scope=accuracy` 运行一个代表性 ATK
+5. 使用 `ACCURACY_START=<id>`、`ACCURACY_END=<id+1>` 和 `-scope=accuracy` 运行一个代表性 ATK
    case，确认 executor、YAML 判据和公开调用链正确；需要时再扩大到受影响 case 集合。
-5. 需要新增或扩充精度用例时执行 `gen_cases`，检查生成结果后更新 `atk_<op>.json`。
 
-正式验收前，根据用户模型 case 准备 `_perf.json`，根据全部可达 TilingKey 准备 `_mss.json`，
-并在算子 ATK README 中完成三类映射。适配后的本仓交付候选固定代码、`reference.py`、三份测试
-文件和构建结果，不设置 case 范围，对每个受影响算子执行一次 `all`；精度阶段必须执行全部
+适配后的本仓交付候选固定代码、`reference.py`、三份测试文件和构建结果，不设置 case 范围，
+对每个受影响算子执行一次 `all`；精度阶段必须执行全部
 `(case, seed)` 组合，所有组合均通过后才能判定本仓精度验收通过。PR CI 重放同一批交付件和验收
 规则。
 
@@ -330,9 +331,11 @@ bash tests/atk/run_test_cpu.sh -op=<op_name> -scope=gen_cases
 新增算子工程时按以下顺序处理：
 
 1. 在 `tests/atk/<op_name>/` 下放置 `README.md`、`reference.py`、三份正式验收 JSON、
-   `<op_name>.yaml`、`gen_<op_name>.py`、`executor_<op_name>.py` 和 `scripts/`。
-2. `atk_<op_name>.json` 从精度候选用例形成；`atk_<op_name>_perf.json` 按用户模型 case 手工
-   建立；`atk_<op_name>_mss.json` 按全部可达 TilingKey 手工建立。
+   `<op_name>.yaml`、`executor_<op_name>.py` 和 `scripts/`；需要随机扩展候选时增加
+   `gen_<op_name>.py`。
+2. CANNBot 05 和本仓适配完成后，Agent 分析最终公开接口、executor、host tiling 和 kernel，
+   直接生成逻辑分支精度 JSON；根据冻结模型 case 直接生成性能 JSON；根据全部可达 TilingKey
+   及内存、同步和复用路径直接生成 mss JSON。
 3. 在算子 README 中写清输入 shape、dtype、属性、可选输入、变长元数据和 tiling 限制。
 4. `reference.py` 保留唯一数学实现；`executor_<op_name>.py` 负责输入构造和 ATK 接入，其中
    `run_cpu` 转换输入并调用 `reference.py`，`run_npu` 调用 NPU 算子，`FunctionApi` 对接 ATK。
@@ -351,7 +354,7 @@ bash tests/atk/run_test_cpu.sh -op=<op_name> -scope=gen_cases
 维护要求：
 
 1. 每个可达 key 都要有普通和边界用例；同一 key 的不同运行时分支也要有对应覆盖。
-2. 覆盖表中的每个 key 都必须注明对应的 case id，并能在 `gen_<op>.py` 或生成的 JSON 中找到这些 case。
+2. 覆盖表中的每个 key 都必须注明对应的 case id，并能在三份正式验收 JSON 中找到这些 case。
 3. `atk_<op>_mss.json` 至少放入每个 key 的精简用例；性能路径涉及某个 key 时，`atk_<op>_perf.json` 也要覆盖该 key。
 4. 用例中的输入条件只表示预期 key，必须补充 host tiling UT 或运行时记录确认实际选中的 key。没有实际选择证据时，不得在 README 中标记为已覆盖。
 5. 不同 SoC 的 tiling 条件不一致时，按 SoC 分别记录覆盖；不适用的 key 要注明原因。
