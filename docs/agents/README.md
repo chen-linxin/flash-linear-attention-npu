@@ -4,16 +4,18 @@
 
 ## CANNBot 路由
 
-数学分类为 Linear Attention 或 Block Sparse Attention、实现类型为 CATLASS C++ 的算子，优先使用
-[`CANNBot 算子开发桥接`](cannbot-workflow.md)：CANNBot 负责接口、唯一 CPU 标杆、方案设计和
+本仓 Ascend C 算子已经统一确认为线性 Attention 算子域，不再逐算子执行算法分类。凡任务涉及
+接口、标杆、方案、kernel、host tiling 或性能优化，直接使用
+[`CANNBot 算子开发桥接`](cannbot-workflow.md)，固定 `algorithm_family=linear_attention` 和
+`workflow_id=catlass-linear-attention-v1`。CANNBot 负责接口、唯一 CPU 标杆、方案设计和
 kernel/host tiling 核心实现；本仓负责 op_api/aclnn、Stable-ABI、Python 导出、ATK、Example/ST、
-构建、安装和 CI。CANNBot 的 validation 状态以本仓测试结果作为最终证据。
+构建、安装和 CI，并将本仓测试结果作为 CANNBot validation 的最终证据。
 
 该路由下，本目录的 `01`–`04` 是仓库接入时必须满足的约束和检查项，不再各自生成第二份接口、
-CPU 标杆、设计或核心实现。尤其不能在本仓 ATK executor 中复制标杆公式。非 CANNBot 适用任务，
-或 CANNBot 明确不可用且已记录原因时，才执行下述本地五阶段流程；同一任务不能混用两套 01–04。
+CPU 标杆、设计或核心实现。尤其不能在本仓 ATK executor 中复制标杆公式。CANNBot 不可用时应
+停止并说明原因；只有用户明确同意降级后，才执行下述本地替代流程。同一任务不能混用两套 01–04。
 
-## 本地工作流入口
+## 本地替代流程（仅显式降级时）
 
 ### 新接口开发
 

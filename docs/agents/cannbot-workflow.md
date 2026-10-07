@@ -1,28 +1,41 @@
 # CANNBot 算子开发桥接
 
-本文定义 CANNBot `catlass-cpp-generator` 与本仓交付流程的边界。目标是让 CANNBot 完成算子核心
-研发，同时复用本仓已有的适配层、ATK 和上库门禁，并且全流程只维护一份接口、标杆和设计。
+本文定义 CANNBot `catlass-cpp-generator` 的 `linear_attention` 功能分支与本仓交付流程的边界。
+目标是让 CANNBot 完成算子核心研发，同时复用本仓已有的适配层、ATK 和上库门禁，并且全流程
+只维护一份接口、标杆和设计。
 
 CANNBot 工作流来源：
 [`plugins-official/catlass-op-generator/catlass-cpp-generator`](https://gitcode.com/cann/cannbot-skills/tree/master/plugins-official/catlass-op-generator/catlass-cpp-generator)。
 开始任务时记录实际使用的 CANNBot commit 或版本，后续恢复任务时继续使用同一版本；需要升级时，
 先检查工作流和产物格式差异。
 
-## 何时使用
+## 固定路由
 
-同时满足以下条件时使用本流程：
+本仓 `fla/ops/ascendc/**` 下的算子均属于线性 Attention 算子域。仓库根规则就是 CANNBot
+需要的分类结论；进入核心开发时直接设置以下字段，不再运行 family 分类：
 
-- 算法已根据公式确认属于 Linear Attention 或 Block Sparse Attention，不能只按算子名称判断。
-- 核心实现使用 CATLASS C++。
-- 任务涉及接口、标杆、方案、kernel、host tiling 或性能优化。
+```text
+algorithm_family=linear_attention
+workflow_id=catlass-linear-attention-v1
+```
 
-只改 op_api、Stable-ABI、Python wrapper、ATK、构建、安装、CI 或文档时，直接使用本仓对应流程。
-不属于上述算法族时，使用 [`README.md`](README.md) 中的本地五阶段流程。
+Agent 不再根据算子名称、局部公式或实现形态重新判断 family。具体任务按修改内容路由：
+
+| 修改内容 | 执行流程 |
+| --- | --- |
+| 接口、golden、方案、kernel、host tiling、TilingData/TilingKey 或性能 | CANNBot `linear_attention` 五阶段流程 |
+| op_api/aclnn、Stable-ABI、Python wrapper 或导出注册 | 本仓适配流程 |
+| ATK、Example/ST、构建、安装或 CI | 本仓交付流程；结果回填 CANNBot 05 |
+| Triton 实现 | 本仓 Triton 流程，不进入 CATLASS C++ 工作流 |
+
+同一任务同时修改核心实现和适配/交付件时，先完成 CANNBot 核心阶段，再进入本仓适配和交付阶段。
+CANNBot 不可用时停止任务并说明原因，不得由 Agent 自行改走本地 01–04。
 
 ## 执行顺序
 
 ```text
 需求和固定版本参考资料
+  -> 固定选择 CANNBot linear_attention
   -> CANNBot 01：确认接口并冻结 operator contract
   -> CANNBot 02：生成唯一 CPU 标杆并冻结 golden contract
   -> CANNBot 03：完成 Stage、资源、同步和性能方案
