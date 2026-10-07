@@ -1,7 +1,7 @@
 # CANNBot 算子开发桥接
 
-本文只定义 CANNBot `catlass-cpp-generator` 的 `linear_attention` 功能分支与本仓适配、ATK 和上库
-流程之间的边界。CANNBot 五阶段的具体方法以实际使用版本为准，本仓不复制这些规则。
+本文记录 CANNBot `catlass-cpp-generator` 的 `linear_attention` 功能分支与本仓适配、ATK 和上库
+流程之间的边界。CANNBot 五阶段的具体方法以实际使用版本为准。
 
 CANNBot 来源：
 [`plugins-official/catlass-op-generator/catlass-cpp-generator`](https://gitcode.com/cann/cannbot-skills/tree/master/plugins-official/catlass-op-generator/catlass-cpp-generator)。
@@ -16,8 +16,8 @@ algorithm_family=linear_attention
 workflow_id=catlass-linear-attention-v1
 ```
 
-不再根据算子名称、局部公式或实现形态重新分类。CANNBot 不可用时停止并报告，不得自行改走本仓
-历史阶段文件。
+上述字段直接作为算法域分类结论。CANNBot 可用且版本匹配是工作流入口条件；缺少条件时记录并
+报告阻塞项。
 
 ## 执行顺序
 
@@ -33,8 +33,8 @@ CANNBot 01：冻结接口和 operator contract
   -> PR / CI
 ```
 
-CANNBot 04 通过后进入 `validation`，但接入完成不能提前标记 `complete`。只有最终候选的完整 ATK
-精度、性能、确定性和内存检测通过后，才更新为 `complete`。
+CANNBot 04 通过后进入 `validation`。最终候选的完整 ATK 精度、性能、确定性和内存检测通过后，
+workflow 更新为 `complete`。
 
 ## 唯一标杆
 
@@ -45,18 +45,18 @@ tests/atk/<op>/reference.py
 ```
 
 该文件就是 CANNBot 的唯一 `reference.py`，同时供 CANNBot 04 直调测试和本仓 ATK executor
-导入。不得在 CANNBot 工程、executor、smoke 脚本或其他测试中复制公式、状态更新或边界处理。
+导入。公式、状态更新和边界处理集中在该文件维护。
 
 `reference.py` 应是纯 CPU/PyTorch 模块：
 
-- 不导入 `fla_npu`、NPU runtime 或 ATK broker；
+- 运行依赖限定为 CPU/PyTorch 和 Python 标准库；
 - 以冻结接口接收输入和属性，返回完整输出 tuple；
 - 内部计算精度、有效区域和边界语义与 golden contract 一致；
 - 可以由直调测试和 ATK CPU 节点在不同进程中独立导入。
 
-若当前 CANNBot 版本只认识默认产物路径，允许使用不含数学逻辑的路径转发或记录目标路径；不得保留
-两份可编辑实现。新建或重新进入 CANNBot 流程的算子按本约定收敛，历史算子不在纯规则变更中批量
-搬迁。
+若当前 CANNBot 版本使用默认产物路径，通过无数学逻辑的路径转发或目标路径记录连接本仓位置，
+可编辑实现仍集中在 `tests/atk/<op>/reference.py`。新建或重新进入 CANNBot 流程的算子按本约定
+收敛，历史算子在后续进入流程时迁移。
 
 ## CANNBot 04：适配前直调验证
 
@@ -71,12 +71,8 @@ workspace，直接执行 `kernel<<<blockDim, ..., stream>>>`，拷回当前 Stag
 3. 全部 Stage 拼接后，使用直调工程运行最小整 kernel 冒烟。
 4. 每轮性能候选先过定向精度；只有最终候选进入 full 验收。
 
-本阶段不得依赖或调用：
-
-- `fla_npu.ops.ascendc`；
-- op_api/aclnn、Stable-ABI 或 ctypes 适配入口；
-- ATK executor 或 `tests/atk/run_test_cpu.sh`；
-- `smoke_operator.py`。
+本阶段的调用边界由直调 host、原始 kernel、唯一 `reference.py` 和 CANNBot 精度比较入口组成。
+仓库公开 API、适配层和 ATK 调用链在后续接入阶段启用。
 
 ## 本仓适配与 ATK 包装
 
@@ -84,19 +80,19 @@ CANNBot 04 直调验证通过后，按本仓文档完成算子定义与 InferSha
 Python wrapper、导出和构建注册。所有参数名称、顺序、类型、默认值和返回值必须与 `docs/api.md`
 一致。
 
-ATK executor 只负责输入构造、数据和属性转换、NPU DUT 调用及 ATK `FunctionApi`：CPU 节点通过
-薄 `run_cpu` 包装调用 `reference.py`，不得自行实现数学标杆。YAML 和 JSON 的值域、有效区域、
+ATK executor 负责输入构造、数据和属性转换、NPU DUT 调用及 ATK `FunctionApi`：CPU 节点通过
+薄 `run_cpu` 包装调用 `reference.py`，数学实现集中在 `reference.py`。YAML 和 JSON 的值域、有效区域、
 shape、dtype 和属性必须与 CANNBot precision policy 及冻结 contract 一致。
 
 ## 适配后快速预检
 
 完成并安装本仓适配层后，才能运行 `tests/atk/<op>/scripts/smoke_operator.py --compare`。该脚本会
-经过 Python API、Stable-ABI 或 ctypes、aclnn/op_api、host tiling 和 kernel；它用于快速确认 ABI、
-kernel 启动、同步和基本精度，不属于 CANNBot 04 的直调测试，也不能作为正式精度结论。
+经过 Python API、Stable-ABI 或 ctypes、aclnn/op_api、host tiling 和 kernel，用于快速确认 ABI、
+kernel 启动、同步和基本精度。正式精度结论由后续 ATK 验收产生。
 
 smoke 通过后，使用 `ACCURACY_START=<id>`、`ACCURACY_END=<id+1>` 和 `-scope=accuracy` 运行一个
 代表性 ATK case，确认 executor、YAML 判据和公开调用链已正确接通。需要时再扩大到受影响 case
-集合，但不得在每轮 Kernel 修改后运行 `scope=all`。
+集合；完整 `scope=all` 安排在最终候选阶段。
 
 ## CANNBot 05：唯一完整验收
 
@@ -108,7 +104,7 @@ bash tests/atk/run_test_cpu.sh -op=<op> -scope=all
 
 该命令是本任务唯一一次完整本地验收，覆盖完整精度矩阵、模型性能 case、确定性、mssanitizer、
 全部可达 TilingKey 和边界分支。Example/ST、构建安装和仓库要求的其他回归按本仓交付规则补充。
-PR CI 可以重放同一批交付件作为合入门禁，但不得维护另一套标杆或验收定义。
+PR CI 重放同一批交付件和验收定义，作为合入门禁。
 
 ## 产物和职责
 
@@ -135,5 +131,5 @@ PR CI 可以重放同一批交付件作为合入门禁，但不得维护另一�
 | smoke 通过但单 case ATK 失败 | ATK executor、YAML 或数据转换；证据指向核心时返回相应 CANNBot 阶段 |
 | full 验收失败 | 按最早受影响位置恢复；修复后最终候选重新执行 fresh full 验收 |
 
-性能未达标时保持 `validation`，每轮只改变一个主要变量，先做直调定向精度再同条件测量。不得降低
-性能目标、跳过本仓门禁或因适配层问题静默修改数学语义。
+性能达到目标前保持 `validation`，每轮改变一个主要变量，先做直调定向精度再同条件测量。性能
+目标、本仓门禁和数学语义在迭代期间保持固定。

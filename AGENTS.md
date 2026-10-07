@@ -8,15 +8,14 @@
 - 本仓 `fla/ops/ascendc/**` 下的算子统一属于线性 Attention 算子域。接口、CPU 标杆、方案、
   kernel、host tiling 和性能优化直接使用
   [`CANNBot linear_attention 工作流`](docs/agents/cannbot-workflow.md)。
-- 固定设置 `algorithm_family=linear_attention`、`workflow_id=catlass-linear-attention-v1`，不再执行
-  family 分类。
-- CANNBot 04 使用直调工程完成逐 Stage 和整 kernel 定向验证，不依赖本仓 op_api、Stable-ABI、
-  Python API 或 ATK executor。
+- 固定设置 `algorithm_family=linear_attention`、`workflow_id=catlass-linear-attention-v1`，直接作为
+  family 分类结论。
+- CANNBot 04 使用直调 host 和 kernel 完成逐 Stage、整 kernel 定向验证。
 - CANNBot 04 通过后，按本仓规则完成 op_api/aclnn、Stable-ABI、Python 导出和 ATK 包装；适配层
-  冒烟通过后，由 CANNBot 05 触发本仓 ATK 完整验收。不得再运行第二套完整验收。
+  冒烟通过后，由 CANNBot 05 触发本仓唯一的 ATK 完整验收。
 - CANNBot 02 生成的 CPU 标杆直接作为 `tests/atk/<op>/reference.py` 交付。CANNBot 直调测试和
-  本仓 ATK executor 必须导入同一文件，禁止复制数学公式。
-- CANNBot 不可用时停止并说明原因，不得自行改走仓库内另一套算子研发流程。
+  本仓 ATK executor 导入同一文件，数学公式集中在该文件维护。
+- CANNBot 可用且版本匹配是 Ascend C 算子研发的入口条件；缺少条件时记录并报告阻塞项。
 
 ## 任务路由
 

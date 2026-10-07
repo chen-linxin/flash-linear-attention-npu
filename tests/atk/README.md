@@ -1,13 +1,13 @@
 # ATK 单算子验证工程
 
 本目录保存 `flash-linear-attention-npu` 仓内 Ascend C 算子的 ATK 单算子验证工程。
-所有正式精度、性能、确定性、内存检测和用例生成动作都通过 ATK 发起；公共脚本只负责拼装
-ATK 命令，不在脚本内导出 `PYTHONPATH`。CANNBot 04 的直调定向验证不属于正式 ATK 验收，
-具体边界见 [`docs/agents/cannbot-workflow.md`](../../docs/agents/cannbot-workflow.md)。
+所有正式精度、性能、确定性、内存检测和用例生成动作都通过 ATK 发起；公共脚本负责拼装 ATK
+命令，运行环境负责准备 `PYTHONPATH`。CANNBot 04 执行直调定向验证，具体边界见
+[`docs/agents/cannbot-workflow.md`](../../docs/agents/cannbot-workflow.md)。
 
 新增或重新进入 CANNBot 流程的算子将唯一 CPU 标杆直接交付为
-`tests/atk/<op_name>/reference.py`。CANNBot 直调测试和 ATK executor 导入同一文件；本目录不再
-维护第二份数学实现。历史算子在后续进入 CANNBot 流程时按此结构迁移，不在规则变更中批量改名。
+`tests/atk/<op_name>/reference.py`。CANNBot 直调测试和 ATK executor 导入同一文件，数学实现
+集中在该文件。历史算子在后续进入 CANNBot 流程时按此结构迁移。
 
 ## 目录结构
 
@@ -31,8 +31,8 @@ tests/atk/
 |   └-- executor_<op_name>.py
 ```
 
-每个算子目录保留 `scripts/`，用于本算子专属的整链路 smoke、数据采集或分析脚本。新建脚本
-不得在 `scripts/` 中维护第二份 CPU 标杆；历史辅助标杆在对应算子再次进入 CANNBot 流程时迁移。
+每个算子目录保留 `scripts/`，用于本算子专属的整链路 smoke、数据采集或分析脚本。CPU 数学
+标杆集中在 `reference.py`；历史辅助标杆在对应算子再次进入 CANNBot 流程时迁移。
 
 ATK 运行产生的 `atk_output/`、`result/`、profiling、sanitizer 日志、XLSX、Python 缓存
 和临时输出不得提交。
@@ -286,7 +286,7 @@ bash tests/atk/run_test_cpu.sh -op=<op_name> -scope=gen_cases
 1. 确认 `reference.py` 与冻结的 golden contract 一致，并已通过 CANNBot 04 直调定向验证。
 2. 构建并安装当前代码，确认运行时加载的是本轮构建结果。
 3. 使用算子 `scripts/` 下的 smoke 入口调用公开 Python API，快速检查 ABI、kernel 启动、同步和
-   基本精度；该步骤会经过适配层，不得用于 CANNBot 04 的适配前验证。
+   基本精度；该步骤属于适配完成后的整链路预检。
 4. 使用 `ACCURACY_START=<id>`、`ACCURACY_END=<id+1>` 和 `-scope=accuracy` 运行一个代表性 ATK
    case，确认 executor、YAML 判据和公开调用链正确；需要时再扩大到受影响 case 集合。
 5. 需要新增或扩充精度用例时执行 `gen_cases`，检查生成结果后更新 `atk_<op>.json`。
@@ -294,8 +294,7 @@ bash tests/atk/run_test_cpu.sh -op=<op_name> -scope=gen_cases
 正式验收前，根据用户模型 case 准备 `_perf.json`，根据全部可达 TilingKey 准备 `_mss.json`，
 并在算子 ATK README 中完成三类映射。CANNBot 05 的最终候选固定代码、`reference.py`、三份测试
 文件和构建结果，不设置 case 范围，对每个受影响算子执行一次 `all`；精度阶段必须执行全部
-`(case, seed)` 组合，所有组合均通过后才能判定精度验收通过。PR CI 可以重放同一批交付件，但
-不得定义第二套标杆或验收规则。
+`(case, seed)` 组合，所有组合均通过后才能判定精度验收通过。PR CI 重放同一批交付件和验收规则。
 
 ## 算子索引
 
