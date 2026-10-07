@@ -2,9 +2,7 @@
 
 本目录保存 `flash-linear-attention-npu` 仓内 Ascend C 算子的 ATK 单算子验证工程。
 本仓适配后的正式精度、性能、确定性、内存检测和用例生成动作都通过 ATK 发起；公共脚本负责拼装
-ATK 命令，运行环境负责准备 `PYTHONPATH`。CANNBot 04 执行直调定向验证，CANNBot 05 执行直调
-full 验收，具体边界见
-[`docs/算子自动开发工作流.md`](../../docs/算子自动开发工作流.md)。
+ATK 命令，运行环境负责准备 `PYTHONPATH`。
 
 新增或重新进入 CANNBot 流程的算子将唯一 CPU 标杆直接交付为
 `tests/atk/<op_name>/reference.py`。CANNBot 直调测试和 ATK executor 导入同一文件，数学实现
