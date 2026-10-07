@@ -44,7 +44,7 @@ ATK 运行产生的 `atk_output/`、`result/`、profiling、sanitizer 日志、X
 | `run_test_cpu.sh`                    | 统一入口，覆盖混合容差精度、性能、确定性、mssanitizer 和用例生成                         |
 | `common/_ascendc_common_executor.py` | executor 共用的基础工具函数，例如 dtype 转换、case_spec 解析、确定性数据生成、有限值检查 |
 | `<op>/reference.py`                  | CANNBot 生成的唯一纯 CPU/PyTorch 数学标杆，供直调测试和 ATK CPU 节点共同导入             |
-| `<op>/executor_<op>.py`              | 本算子的输入构造、标杆薄适配、NPU DUT 调用和 ATK `FunctionApi`                           |
+| `<op>/executor_<op>.py`              | 本算子的输入构造、`reference.py` 调用、NPU DUT 调用和 ATK `FunctionApi`                   |
 | `<op>/gen_<op>.py`                   | 本算子的 ATK 精度候选用例生成器                                                          |
 | `<op>/scripts/`                      | 适配完成后的整链路 smoke、数据采集或分析脚本，不放数学标杆或跨算子公共逻辑                |
 | `<op>/<op>.yaml`                     | ATK case 生成配置，shape 与 dtype 必须符合算子 README 和 tiling 限制                     |
@@ -54,7 +54,7 @@ ATK 运行产生的 `atk_output/`、`result/`、profiling、sanitizer 日志、X
 | `<op>/README.md`                     | 本算子的输入限制、标杆来源、SoC 支持、TilingKey 清单、用例映射、实际选择记录和执行示例     |
 
 `common/` 只放跨算子复用的基础函数。数学实现只存在于 `<op>/reference.py`；executor 中的
-`run_cpu` 只能完成参数转换并调用该文件。`run_npu`、输入生成和 `FunctionApi` 留在各自算子目录中；
+`run_cpu` 完成参数转换并调用该文件。`run_npu`、输入生成和 `FunctionApi` 留在各自算子目录中；
 若需要额外脚本，放入本算子的 `scripts/`。
 
 ## 用例规模与覆盖
@@ -332,8 +332,8 @@ bash tests/atk/run_test_cpu.sh -op=<op_name> -scope=gen_cases
 2. `atk_<op_name>.json` 从精度候选用例形成；`atk_<op_name>_perf.json` 按用户模型 case 手工
    建立；`atk_<op_name>_mss.json` 按全部可达 TilingKey 手工建立。
 3. 在算子 README 中写清输入 shape、dtype、属性、可选输入、变长元数据和 tiling 限制。
-4. `reference.py` 保留唯一数学实现；`executor_<op_name>.py` 保留 `build_inputs`、薄 `run_cpu`、
-   `run_npu` 和 `FunctionApi`，其中 `run_cpu` 只调用 `reference.py`。
+4. `reference.py` 保留唯一数学实现；`executor_<op_name>.py` 负责输入构造和 ATK 接入，其中
+   `run_cpu` 转换输入并调用 `reference.py`，`run_npu` 调用 NPU 算子，`FunctionApi` 对接 ATK。
 5. 若需要公共基础函数，从 `tests/atk/common/_ascendc_common_executor.py` 引入；不要把算子专属逻辑放入 `common/`。
 6. YAML 与 JSON 中的 shape 必须同时满足源码 README、tiling 检查和 executor 输入构造。
 7. 修改后至少执行 Python 语法和导入检查；具备 NPU 环境时，按“执行阶段”和阶段 5 的验证路由运行对应测试。

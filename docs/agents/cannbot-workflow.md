@@ -81,7 +81,7 @@ Python wrapper、导出和构建注册。所有参数名称、顺序、类型、
 一致。
 
 ATK executor 负责输入构造、数据和属性转换、NPU DUT 调用及 ATK `FunctionApi`：CPU 节点通过
-薄 `run_cpu` 包装调用 `reference.py`，数学实现集中在 `reference.py`。YAML 和 JSON 的值域、有效区域、
+`run_cpu` 转换输入和属性，并调用 `reference.py` 生成预期结果。YAML 和 JSON 的值域、有效区域、
 shape、dtype 和属性必须与 CANNBot precision policy 及冻结 contract 一致。
 
 ## 适配后快速预检
