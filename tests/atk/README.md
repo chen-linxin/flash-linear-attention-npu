@@ -195,37 +195,6 @@ bash tests/atk/run_test_cpu.sh -op=<op_name> -scope=accuracy
 三路双标杆，精度入口为该算子 `README.md` 中的 `scripts/run_matrix.sh`；统一脚本仍用于其
 性能、确定性和 mssanitizer。
 
-### 精度失败输出采集
-
-先用当前算子的完整精度入口复现失败。需要固定单个失败用例并保存 NPU/CPU 输出时，在算子 ATK
-目录执行：
-
-```bash
-cd tests/atk/<op_name>
-atk node --name npu_dut --backend npu --devices <device_id> \
-    --output_path <output_dir> \
-  node --name cpu_golden --backend cpu \
-    --output_path <output_dir> \
-  task \
-    -c ./atk_<op_name>.json \
-    --task accuracy \
-    --bm_device cpu \
-    -p ./executor_<op_name>.py \
-    -s <case_id> \
-    -e <case_id_plus_one> \
-    --save_data output \
-    --gm_init_flag \
-    -to <timeout>
-```
-
-`-e` 不包含在范围内，单用例必须设置为 `case_id + 1`。先从 ATK 报告确认实际 case id、seed、
-输出名称和精度结果，再核对输出的 shape、dtype 和有效区域。需要观察空间误差分布时执行：
-
-```bash
-ct viz <npu_output> <cpu_output> \
-  --out_dir <output_dir> --name <case_name> --spatial
-```
-
 ### 性能执行
 
 性能测试使用 ATK `performance_device`：
