@@ -2,7 +2,18 @@
 
 本目录按新接口开发的五个阶段组织，每个阶段只维护该阶段需要的输入、方法、输出和完成条件。仓库级强制约束与任务路由以根目录 `AGENTS.md` 为准；构建、安装、runtime 架构、PR 和 CI 细节保存在各自负责的文档中。
 
-## 工作流入口
+## CANNBot 路由
+
+数学分类为 Linear Attention 或 Block Sparse Attention、实现类型为 CATLASS C++ 的算子，优先使用
+[`CANNBot 算子开发桥接`](cannbot-workflow.md)：CANNBot 负责接口、唯一 CPU 标杆、方案设计和
+kernel/host tiling 核心实现；本仓负责 op_api/aclnn、Stable-ABI、Python 导出、ATK、Example/ST、
+构建、安装和 CI。CANNBot 的 validation 状态以本仓测试结果作为最终证据。
+
+该路由下，本目录的 `01`–`04` 是仓库接入时必须满足的约束和检查项，不再各自生成第二份接口、
+CPU 标杆、设计或核心实现。尤其不能在本仓 ATK executor 中复制标杆公式。非 CANNBot 适用任务，
+或 CANNBot 明确不可用且已记录原因时，才执行下述本地五阶段流程；同一任务不能混用两套 01–04。
+
+## 本地工作流入口
 
 ### 新接口开发
 
