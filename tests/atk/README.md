@@ -299,6 +299,14 @@ bash tests/atk/run_test_cpu.sh -op=<op_name> -scope=gen_cases
 `(case, seed)` 组合，所有组合均通过后才能判定本仓精度验收通过。PR CI 重放同一批交付件和验收
 规则。
 
+## 失败回流
+
+| 失败证据 | 返回位置 |
+| --- | --- |
+| 整链路 smoke 失败 | 本仓公开 API、Stable-ABI、op_api/aclnn、构建注册或安装结果 |
+| smoke 通过但单 case ATK 失败 | ATK executor、YAML、输入构造或数据转换；证据指向核心时返回相应 CANNBot 阶段 |
+| ATK full 失败 | 适配或测试资产问题在本仓修复；核心问题返回相应 CANNBot 阶段，再重跑后续流程 |
+
 ## 算子索引
 
 | 算子目录                           | 公开接口或调用入口                                     | 约束说明                                                                                    |
