@@ -1,7 +1,7 @@
 # ATK 单算子验证工程
 
 本目录保存 `flash-linear-attention-npu` 仓内 Ascend C 算子的 ATK 单算子验证工程。
-精度、性能、确定性、内存检测和用例生成均通过 ATK 发起；公共脚本负责拼装 ATK 命令，运行环境
+精度、性能、确定性和内存检测均通过 ATK 发起；公共脚本负责拼装 ATK 命令，运行环境
 负责准备 `PYTHONPATH`。
 
 每个算子使用 `tests/atk/<op_name>/reference.py` 作为唯一纯 CPU/PyTorch 数学标杆。ATK executor
@@ -23,7 +23,6 @@ tests/atk/
 |   |-- atk_<op_name>_perf.json     # 性能精简用例（模型 case）
 |   |-- atk_<op_name>_mss.json      # 内存检测精简用例（需覆盖所有 tilingKey）
 |   |-- <op_name>.yaml
-|   |-- gen_<op_name>.py             # 可选的随机扩展用例生成器
 |   |-- scripts/
 |   |   └-- <本算子专用脚本>
 |   └-- executor_<op_name>.py
@@ -39,11 +38,10 @@ ATK 运行产生的 `atk_output/`、`result/`、profiling、sanitizer 日志、X
 
 | 文件                                   | 职责                                                                                     |
 | -------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `run_test_cpu.sh`                    | 统一入口，覆盖混合容差精度、性能、确定性、mssanitizer 和用例生成                         |
+| `run_test_cpu.sh`                    | 统一入口，覆盖混合容差精度、性能、确定性和 mssanitizer                                  |
 | `common/_ascendc_common_executor.py` | executor 共用的基础工具函数，例如 dtype 转换、case_spec 解析、确定性数据生成、有限值检查 |
 | `<op>/reference.py`                  | 唯一纯 CPU/PyTorch 数学标杆，供 ATK CPU 节点调用                                        |
 | `<op>/executor_<op>.py`              | 本算子的输入构造、`reference.py` 调用、NPU DUT 调用和 ATK `FunctionApi`                   |
-| `<op>/gen_<op>.py`                   | 可选的随机扩展用例生成器，不承担正式分支覆盖定义                                          |
 | `<op>/scripts/`                      | 公开 API 整链路 smoke、数据采集或分析脚本，不放数学标杆或跨算子公共逻辑                   |
 | `<op>/<op>.yaml`                     | ATK case 生成配置，shape 与 dtype 必须符合算子 README 和 tiling 限制                     |
 | `<op>/atk_<op>.json`                 | 逻辑分支覆盖用例，精度检测使用                                                          |
@@ -89,8 +87,7 @@ CPU 精度对比。
 | `atk_<op>_perf.json` | 用户模型性能 case | 每个模型 case 均保留原始 shape、dtype、属性和目标 SoC；存在性能目标时逐 case 记录基线、目标和统计方式 |
 | `atk_<op>_mss.json` | 最终实现的全部可达 TilingKey 和内存、同步、复用路径 | 每个可达 TilingKey 至少有一个最小代表用例，并覆盖该 key 下与内存、同步或复用有关的关键路径 |
 
-三份 ATK 格式 JSON 是正式验收的固定输入。`gen_cases` 定位为可选的随机扩展和探索工具，
-其结果可作为补充候选；正式精度覆盖以最终代码分支分析和 case 映射为准。
+三份 ATK 格式 JSON 是正式验收的固定输入；正式精度覆盖以最终代码分支分析和 case 映射为准。
 
 算子 ATK README 必须建立三类映射：逻辑分支到精度 case id、用户模型 case 到性能 case id、
 可达 TilingKey 到 `_mss.json` case id。文件存在但映射缺失或覆盖不全，仍视为用例包不完整。
@@ -144,12 +141,12 @@ bash tests/atk/run_test_cpu.sh -op=<op_name>
 | 参数                    | 说明                                                                                                           |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `-op=<op_name>`       | `tests/atk` 下的算子目录名                                                                                   |
-| `-npu_device_id=<id>` | 传给`atk node --devices` 的 NPU 设备号，默认`0`；`gen_cases` 不需要                                       |
-| `-scope=<scope>`      | 执行动作，支持`all/accuracy/performance/determinism/mssanitizer/gen_cases`                                   |
+| `-npu_device_id=<id>` | 传给`atk node --devices` 的 NPU 设备号，默认`0`                                                       |
+| `-scope=<scope>`      | 执行动作，支持`all/accuracy/performance/determinism/mssanitizer`                                        |
 | `-soc=<soc>`          | SOC 标识，支持`ascend910b/A2`、`ascend910_93/A3`、`ascend950/A5`；默认 `auto`，由 `npu-smi` 自动探测 |
 
 `all` 包含 `accuracy`、`performance`、`determinism` 和 `mssanitizer`，并在运行前检查三份
-用例 JSON 均可解析且非空。`gen_cases` 不在 `all` 中，必须显式指定。
+用例 JSON 均可解析且非空。
 
 示例：
 
@@ -159,7 +156,6 @@ bash tests/atk/run_test_cpu.sh -op=causal_conv1d -scope=accuracy
 bash tests/atk/run_test_cpu.sh -op=causal_conv1d -scope=performance
 bash tests/atk/run_test_cpu.sh -op=causal_conv1d -scope=determinism
 bash tests/atk/run_test_cpu.sh -op=causal_conv1d -scope=mssanitizer
-bash tests/atk/run_test_cpu.sh -op=causal_conv1d -scope=gen_cases
 ```
 
 ## case 范围
@@ -254,25 +250,6 @@ bash tests/atk/run_test_cpu.sh -op=<op_name> -scope=determinism
 bash tests/atk/run_test_cpu.sh -op=<op_name> -scope=mssanitizer
 ```
 
-### 可选精度扩展用例生成
-
-需要补充随机扩展候选时，通过 ATK `case` 执行：
-
-```bash
-bash tests/atk/run_test_cpu.sh -op=<op_name> -scope=gen_cases
-```
-
-生成结果位于 `result/<op>/json/all_<op>.json`。结合最终代码分支分析检查这些候选，将有效补充
-case 直接写入 `atk_<op>.json`；三份正式验收 JSON 保持为固定测试输入。
-
-生成相关变量：
-
-| 变量                        | 默认值       | 说明                 |
-| --------------------------- | ------------ | -------------------- |
-| `GEN_CASES_DTYPE_NUMBERS` | `100`      | 传给`atk case -dt` |
-| `GEN_CASES_EXTRA_NUMBERS` | `0`        | 传给`atk case -en` |
-| `GEN_CASES_SEED`          | `20260813` | 传给`atk case -s`  |
-
 ## 执行顺序
 
 1. 检查 `reference.py`、executor 和 YAML 可导入，三份正式测试 JSON 可解析且非空，并确认算子
@@ -318,8 +295,7 @@ case 直接写入 `atk_<op>.json`；三份正式验收 JSON 保持为固定测�
 新增算子工程时按以下顺序处理：
 
 1. 在 `tests/atk/<op_name>/` 下放置 `README.md`、`reference.py`、三份正式验收 JSON、
-   `<op_name>.yaml`、`executor_<op_name>.py` 和 `scripts/`；需要随机扩展候选时增加
-   `gen_<op_name>.py`。
+   `<op_name>.yaml`、`executor_<op_name>.py` 和 `scripts/`。
 2. 根据最终公开接口、executor、host tiling 和 kernel 的可达分支生成逻辑分支精度 JSON；根据
    用户模型 case 生成性能 JSON；根据全部可达 TilingKey 及内存、同步和复用路径生成 mss JSON。
 3. 在算子 README 中写清输入 shape、dtype、属性、可选输入、变长元数据和 tiling 限制。
