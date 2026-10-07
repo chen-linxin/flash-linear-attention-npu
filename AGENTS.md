@@ -1,7 +1,8 @@
 # AGENTS.md
 
 本文件是 `flash-linear-attention-npu` 的仓库级 Agent 规则。根文件只保留工作流来源和任务路由；
-具体边界见 `docs/agents/`。若子目录存在更近的 `AGENTS.md`，以更近文件为准。
+具体边界见 [`CANNBot 算子开发桥接`](docs/agents/cannbot-workflow.md)。若子目录存在更近的
+`AGENTS.md`，以更近文件为准。
 
 ## Ascend C 算子开发
 
