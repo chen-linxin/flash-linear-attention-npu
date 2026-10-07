@@ -1,14 +1,14 @@
 # AGENTS.md
 
 本文件是 `flash-linear-attention-npu` 的仓库级 Agent 规则。根文件只保留工作流来源和任务路由；
-具体边界见 [`CANNBot 算子开发桥接`](docs/agents/cannbot-workflow.md)。若子目录存在更近的
+具体边界见 [`算子自动开发工作流`](docs/算子自动开发工作流.md)。若子目录存在更近的
 `AGENTS.md`，以更近文件为准。
 
 ## Ascend C 算子开发
 
 - 本仓 `fla/ops/ascendc/**` 下的算子统一属于线性 Attention 算子域。接口、CPU 标杆、方案、
   kernel、host tiling 和性能优化直接使用
-  [`CANNBot linear_attention 工作流`](docs/agents/cannbot-workflow.md)。
+  [`CANNBot linear_attention 工作流`](docs/算子自动开发工作流.md)。
 - 固定设置 `algorithm_family=linear_attention`、`workflow_id=catlass-linear-attention-v1`，直接作为
   family 分类结论。
 - CANNBot 04 使用直调 host 和 kernel 完成逐 Stage、整 kernel 定向验证。
@@ -22,7 +22,7 @@
 
 | 任务类型 | 必读内容 |
 | --- | --- |
-| Ascend C 接口、标杆、方案、kernel、host tiling 或性能 | [`docs/agents/cannbot-workflow.md`](docs/agents/cannbot-workflow.md) |
+| Ascend C 接口、标杆、方案、kernel、host tiling 或性能 | [`docs/算子自动开发工作流.md`](docs/算子自动开发工作流.md) |
 | op_api/aclnn、Stable-ABI、Python wrapper 或公共 runtime | [`docs/architecture/适配层接入指南.md`](docs/architecture/适配层接入指南.md)、[`docs/architecture/torch-npu-decoupled-architecture.md`](docs/architecture/torch-npu-decoupled-architecture.md) |
 | ATK 资产、用例、executor 或验收 | [`tests/atk/README.md`](tests/atk/README.md) 和当前算子的 ATK README |
 | wheel、OPP、构建或安装 | [`docs/开发者指南.md`](docs/开发者指南.md) 和相关构建脚本 |
