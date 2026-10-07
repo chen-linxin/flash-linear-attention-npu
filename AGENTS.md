@@ -10,8 +10,10 @@
 - 固定设置 `algorithm_family=linear_attention`、`workflow_id=catlass-linear-attention-v1`，直接作为
   family 分类结论。
 - CANNBot 04 使用直调 host 和 kernel 完成逐 Stage、整 kernel 定向验证。
-- CANNBot 04 通过后，按本仓规则完成 op_api/aclnn、Stable-ABI、Python 导出和 ATK 包装；适配层
-  冒烟通过后，由 CANNBot 05 触发本仓唯一的 ATK 完整验收。
+- CANNBot 05 继续使用直调工程完成全量精度、功能和性能验收；验收通过后 CANNBot workflow
+  进入 `complete`。
+- CANNBot workflow 完成后，按本仓规则接入 op_api/aclnn、Stable-ABI、Python 导出和 ATK 包装；
+  适配层冒烟和单 case ATK 通过后，执行本仓 ATK full 验收。
 - CANNBot 02 生成的 CPU 标杆直接作为 `tests/atk/<op>/reference.py` 交付。CANNBot 直调测试和
   本仓 ATK executor 导入同一文件，数学公式集中在该文件维护。
 - CANNBot 可用且版本匹配是 Ascend C 算子研发的入口条件；缺少条件时记录并报告阻塞项。

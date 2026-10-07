@@ -1,8 +1,9 @@
 # ATK 单算子验证工程
 
 本目录保存 `flash-linear-attention-npu` 仓内 Ascend C 算子的 ATK 单算子验证工程。
-所有正式精度、性能、确定性、内存检测和用例生成动作都通过 ATK 发起；公共脚本负责拼装 ATK
-命令，运行环境负责准备 `PYTHONPATH`。CANNBot 04 执行直调定向验证，具体边界见
+本仓适配后的正式精度、性能、确定性、内存检测和用例生成动作都通过 ATK 发起；公共脚本负责拼装
+ATK 命令，运行环境负责准备 `PYTHONPATH`。CANNBot 04 执行直调定向验证，CANNBot 05 执行直调
+full 验收，具体边界见
 [`docs/算子自动开发工作流.md`](../../docs/算子自动开发工作流.md)。
 
 新增或重新进入 CANNBot 流程的算子将唯一 CPU 标杆直接交付为
@@ -283,7 +284,7 @@ bash tests/atk/run_test_cpu.sh -op=<op_name> -scope=gen_cases
 
 适配层接入后的预检按以下顺序执行：
 
-1. 确认 `reference.py` 与冻结的 golden contract 一致，并已通过 CANNBot 04 直调定向验证。
+1. 确认 `reference.py` 与冻结的 golden contract 一致，CANNBot 五阶段已完成并通过直调 full 验收。
 2. 构建并安装当前代码，确认运行时加载的是本轮构建结果。
 3. 使用算子 `scripts/` 下的 smoke 入口调用公开 Python API，快速检查 ABI、kernel 启动、同步和
    基本精度；该步骤属于适配完成后的整链路预检。
@@ -292,9 +293,10 @@ bash tests/atk/run_test_cpu.sh -op=<op_name> -scope=gen_cases
 5. 需要新增或扩充精度用例时执行 `gen_cases`，检查生成结果后更新 `atk_<op>.json`。
 
 正式验收前，根据用户模型 case 准备 `_perf.json`，根据全部可达 TilingKey 准备 `_mss.json`，
-并在算子 ATK README 中完成三类映射。CANNBot 05 的最终候选固定代码、`reference.py`、三份测试
+并在算子 ATK README 中完成三类映射。适配后的本仓交付候选固定代码、`reference.py`、三份测试
 文件和构建结果，不设置 case 范围，对每个受影响算子执行一次 `all`；精度阶段必须执行全部
-`(case, seed)` 组合，所有组合均通过后才能判定精度验收通过。PR CI 重放同一批交付件和验收规则。
+`(case, seed)` 组合，所有组合均通过后才能判定本仓精度验收通过。PR CI 重放同一批交付件和验收
+规则。
 
 ## 算子索引
 
